@@ -1,6 +1,9 @@
 #include "utility.h"
 #include "lio_sam/cloud_info.h"
 #include "lio_sam/save_map.h"
+#include <fstream>
+#include <iomanip>
+
 
 #include <gtsam/geometry/Rot3.h>
 #include <gtsam/geometry/Pose3.h>
@@ -54,6 +57,11 @@ public:
 
     // gtsam
     NonlinearFactorGraph gtSAMgraph;
+
+    // [ADD] mapping orientation debug 0211
+    std::ofstream mapOriCsv;
+    bool mapOriHeaderWritten = false;
+
     Values initialEstimate;
     Values optimizedEstimate;
     ISAM2 *isam;
@@ -189,6 +197,14 @@ public:
         downSizeFilterSurroundingKeyPoses.setLeafSize(surroundingKeyframeDensity, surroundingKeyframeDensity, surroundingKeyframeDensity); // for surrounding key poses of scan-to-map optimization
 
         allocateMemory();
+
+        mapOriCsv.open("lio_map_ori.csv", std::ios::out | std::ios::trunc);
+        if (!mapOriCsv.is_open()) {
+            ROS_ERROR("[MAP_ORI] Failed to open lio_map_ori.csv");
+        } else {
+            ROS_INFO("[MAP_ORI] Logging to lio_map_ori.csv");
+        }
+
     }
 
     void allocateMemory()
@@ -797,6 +813,8 @@ public:
             transformTobeMapped[2] = cloudInfo.imuYawInit;
 
             if (!useImuHeadingInitialization)
+                transformTobeMapped[0] = 0.00001;           //0121  
+                transformTobeMapped[1] = 0.00001;           //0121
                 transformTobeMapped[2] = 0;
 
             lastImuTransformation = pcl::getTransformation(0, 0, 0, cloudInfo.imuRollInit, cloudInfo.imuPitchInit, cloudInfo.imuYawInit); // save imu before return;
@@ -1224,6 +1242,37 @@ public:
         cv::transpose(matA, matAt);
         matAtA = matAt * matA;
         matAtB = matAt * matB;
+
+
+        // ------------------------------
+        // [ADD] IMU roll/pitch soft prior into scan-to-map normal equation
+        // ------------------------------
+        // if (cloudInfo.imuAvailable)w
+        // {
+        //     // IMU reference (radians)
+        //     const float imuRoll  = static_cast<float>(cloudInfo.imuRollInit);
+        //     const float imuPitch = static_cast<float>(cloudInfo.imuPitchInit);
+
+        //     // Gate (optional but recommended): avoid near singular / crazy IMU pitch
+        //     if (std::isfinite(imuRoll) && std::isfinite(imuPitch) && std::abs(imuPitch) < 1.4f)
+        //     {
+        //         // Weight: start small (e.g., 0.05 ~ 0.2), then tune
+        //         const float w = static_cast<float>(imuRPYWeight); // you must define/load imuRPYWeight
+
+        //         // Only apply when weight is positive
+        //         if (w > 0.0f)
+        //         {
+        //             // H += w * I on roll/pitch
+        //             matAtA.at<float>(0, 0) += w;
+        //             matAtA.at<float>(1, 1) += w;
+
+        //             // g += w * (imu - current)
+        //             matAtB.at<float>(0, 0) += w * (imuRoll  - static_cast<float>(transformTobeMapped[0]));
+        //             matAtB.at<float>(1, 0) += w * (imuPitch - static_cast<float>(transformTobeMapped[1]));
+        //         }
+        //     }
+        // }
+
         cv::solve(matAtA, matAtB, matX, cv::DECOMP_QR);
 
         if (iterCount == 0) {
@@ -1641,6 +1690,25 @@ public:
         laserOdometryROS.pose.pose.position.y = transformTobeMapped[4];
         laserOdometryROS.pose.pose.position.z = transformTobeMapped[5];
         laserOdometryROS.pose.pose.orientation = tf::createQuaternionMsgFromRollPitchYaw(transformTobeMapped[0], transformTobeMapped[1], transformTobeMapped[2]);
+        
+        // [ADD] mapping global orientation dump
+        if (mapOriCsv.is_open())
+        {
+            if (!mapOriHeaderWritten)
+            {
+                mapOriCsv << "stamp,src,roll,pitch,yaw\n";
+                mapOriHeaderWritten = true;
+            }
+
+            mapOriCsv << std::fixed << std::setprecision(9)
+                    << timeLaserInfoStamp.toSec() << ","
+                    << "global,"
+                    << transformTobeMapped[0] << ","
+                    << transformTobeMapped[1] << ","
+                    << transformTobeMapped[2]
+                    << "\n";
+        }
+
         pubLaserOdometryGlobal.publish(laserOdometryROS);
         
         // Publish TF
@@ -1693,6 +1761,16 @@ public:
             laserOdomIncremental.pose.pose.position.y = y;
             laserOdomIncremental.pose.pose.position.z = z;
             laserOdomIncremental.pose.pose.orientation = tf::createQuaternionMsgFromRollPitchYaw(roll, pitch, yaw);
+            
+            if (mapOriCsv.is_open())
+            {
+                mapOriCsv << std::fixed << std::setprecision(9)
+                        << timeLaserInfoStamp.toSec() << ","
+                        << "incremental,"
+                        << roll << "," << pitch << "," << yaw
+                        << "\n";
+            }
+
             if (isDegenerate)
                 laserOdomIncremental.pose.covariance[0] = 1;
             else

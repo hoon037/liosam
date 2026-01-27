@@ -1,0 +1,47 @@
+<launch>
+
+  <!-- ========================================================= -->
+  <!--  SENSOR DRIVERS (from catkin_ws)                          -->
+  <!-- ========================================================= -->
+
+  <!-- Velodyne VLP-16 -->
+  <include file="$(find velodyne_pointcloud)/launch/VLP16_points.launch" />
+
+  <!-- VectorNav IMU -->
+  <include file="$(find vectornav)/launch/vectornav.launch" />
+
+
+  <!-- ========================================================= -->
+  <!--  IMU TIME RECONSTRUCTION                                  -->
+  <!-- ========================================================= -->
+
+  <node pkg="lio_sam"
+        type="imu_time_from_lidar_node"
+        name="imu_time_from_lidar"
+        output="screen">
+
+    <param name="imu_in"    value="/vectornav/IMU"/>
+    <param name="lidar_in"  value="/velodyne_points"/>
+    <param name="imu_out"   value="/imu/data"/>
+    <param name="imu_rate"  value="40.0"/>
+
+  </node>
+
+
+  <!-- ========================================================= -->
+  <!--  LIO-SAM PARAMETERS                                      -->
+  <!-- ========================================================= -->
+
+  <rosparam file="$(find lio_sam)/config/params_2velodyne_imu.yaml"
+            command="load" />
+
+
+  <!-- ========================================================= -->
+  <!--  LIO-SAM CORE                                             -->
+  <!-- ========================================================= -->
+
+  <include file="$(find lio_sam)/launch/include/module_loam.launch" />
+  <include file="$(find lio_sam)/launch/include/module_robot_state_publisher.launch" />
+  <include file="$(find lio_sam)/launch/include/module_rviz.launch" />
+
+</launch>

@@ -101,3 +101,8 @@ target_link_libraries(${PROJECT_NAME}_mapOptmization Boost::timer ${catkin_LIBRA
 # IMU Preintegration
 add_executable(${PROJECT_NAME}_imuPreintegration src/imuPreintegration.cpp)
 target_link_libraries(${PROJECT_NAME}_imuPreintegration Boost::timer ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${OpenCV_LIBRARIES} gtsam)
+
+# IMU Timestmap
+add_executable(imu_time_from_lidar_node src/imu_time_from_lidar_node.cpp)
+target_link_libraries(imu_time_from_lidar_node ${catkin_LIBRARIES})
+add_dependencies(imu_time_from_lidar_node ${catkin_EXPORTED_TARGETS})

@@ -1,0 +1,25 @@
+# ROS / build
+build/
+devel/
+install/
+.log/
+*.log
+
+# ROS runtime / bags
+.ros/
+rosbag/
+*.bag
+
+# Maps / pointclouds
+*.pcd
+*.ply
+*.bin
+map/
+maps/
+
+# Data / logs
+*.csv
+data/
+
+# OS
+.DS_Store

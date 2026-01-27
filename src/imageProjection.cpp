@@ -1,5 +1,9 @@
 #include "utility.h"
 #include "lio_sam/cloud_info.h"
+#include <fstream>
+#include <mutex>
+#include <iomanip>
+
 
 struct VelodynePointXYZIRT
 {
@@ -86,6 +90,21 @@ private:
 
     vector<int> columnIdnCountVec;
 
+    std::ofstream rawImuCsv;
+    bool rawImuHeaderWritten = false;
+    std::mutex rawImuMtx;
+
+    // [ADD] deskew rotation debug
+    // bool deskewStartRecorded = false;
+    // double dbgRotX0, dbgRotY0, dbgRotZ0;
+    // ===============================
+    // [ADD] Deskew rotation debug
+    // ===============================
+    bool deskewStartRecorded = false;
+    double dbgRotX0 = 0.0;
+    double dbgRotY0 = 0.0;
+    double dbgRotZ0 = 0.0;
+
 
 public:
     ImageProjection():
@@ -100,6 +119,13 @@ public:
 
         allocateMemory();
         resetParameters();
+
+        rawImuCsv.open("lio_raw_imu.csv", std::ios::out | std::ios::trunc);
+        if (!rawImuCsv.is_open()) {
+            ROS_ERROR("[RAW_IMU] Failed to open lio_raw_imu.csv");
+        } else {
+            ROS_INFO("[RAW_IMU] Logging to lio_raw_imu.csv");
+        }
 
         pcl::console::setVerbosityLevel(pcl::console::L_ERROR);
     }
@@ -148,27 +174,89 @@ public:
 
     void imuHandler(const sensor_msgs::Imu::ConstPtr& imuMsg)
     {
+        // [KEEP] RAW IMU calculation ONLY
+        double t = imuMsg->header.stamp.toSec();
+
+        double raw_qw = imuMsg->orientation.w;
+        double raw_qx = imuMsg->orientation.x;
+        double raw_qy = imuMsg->orientation.y;
+        double raw_qz = imuMsg->orientation.z;
+
+        tf::Quaternion q_raw(raw_qx, raw_qy, raw_qz, raw_qw);
+        double raw_roll, raw_pitch, raw_yaw;
+        tf::Matrix3x3(q_raw).getRPY(raw_roll, raw_pitch, raw_yaw);
+
         sensor_msgs::Imu thisImu = imuConverter(*imuMsg);
 
+        // ===== Data 2: experimental IMU data with ACC sign flipped only =====
+    // ---- Comment out this entire block to revert to original behavior ----
+        // {
+        //     sensor_msgs::Imu accFlippedImu = thisImu;
+
+        //     // Flip the sign of linear acceleration only
+        //     accFlippedImu.linear_acceleration.x *= -1.0;
+        //     accFlippedImu.linear_acceleration.y *= -1.0;
+        //     accFlippedImu.linear_acceleration.z *= -1.0;
+
+        //     // Overwrite Variable 1 with the modified data
+        //     thisImu = accFlippedImu;
+        // }
+
         std::lock_guard<std::mutex> lock1(imuLock);
+
+        // [ADD] Extrinsic-applied IMU orientation (thisImu)
+        double ext_qw = thisImu.orientation.w;
+        double ext_qx = thisImu.orientation.x;
+        double ext_qy = thisImu.orientation.y;
+        double ext_qz = thisImu.orientation.z;
+
+        tf::Quaternion q_ext(ext_qx, ext_qy, ext_qz, ext_qw);
+        double ext_roll, ext_pitch, ext_yaw;
+        tf::Matrix3x3(q_ext).getRPY(ext_roll, ext_pitch, ext_yaw);
+
+        // [ADD] CSV dump (RAW + EXTRINSIC, same timestamp)
+        {
+            std::lock_guard<std::mutex> lock(rawImuMtx);
+
+            if (rawImuCsv.is_open()) {
+
+                if (!rawImuHeaderWritten) {
+                    rawImuCsv
+                        << "stamp,"
+                        << "raw_qw,raw_qx,raw_qy,raw_qz,raw_roll,raw_pitch,raw_yaw,"
+                        << "ext_qw,ext_qx,ext_qy,ext_qz,ext_roll,ext_pitch,ext_yaw\n";
+                    rawImuHeaderWritten = true;
+                }
+
+                rawImuCsv << std::fixed << std::setprecision(9)
+                        << t << ","
+                        << raw_qw << "," << raw_qx << "," << raw_qy << "," << raw_qz << ","
+                        << raw_roll << "," << raw_pitch << "," << raw_yaw << ","
+                        << ext_qw << "," << ext_qx << "," << ext_qy << "," << ext_qz << ","
+                        << ext_roll << "," << ext_pitch << "," << ext_yaw
+                        << "\n";
+            }
+        }
+
         imuQueue.push_back(thisImu);
 
         // debug IMU data
-        // cout << std::setprecision(6);
-        // cout << "IMU acc: " << endl;
-        // cout << "x: " << thisImu.linear_acceleration.x << 
-        //       ", y: " << thisImu.linear_acceleration.y << 
-        //       ", z: " << thisImu.linear_acceleration.z << endl;
-        // cout << "IMU gyro: " << endl;
-        // cout << "x: " << thisImu.angular_velocity.x << 
-        //       ", y: " << thisImu.angular_velocity.y << 
-        //       ", z: " << thisImu.angular_velocity.z << endl;
-        // double imuRoll, imuPitch, imuYaw;
-        // tf::Quaternion orientation;
-        // tf::quaternionMsgToTF(thisImu.orientation, orientation);
-        // tf::Matrix3x3(orientation).getRPY(imuRoll, imuPitch, imuYaw);
-        // cout << "IMU roll pitch yaw: " << endl;
-        // cout << "roll: " << imuRoll << ", pitch: " << imuPitch << ", yaw: " << imuYaw << endl << endl;
+        cout << std::setprecision(6);
+        cout << "IMU acc: " << endl;
+        cout << "x: " << thisImu.linear_acceleration.x << 
+              ", y: " << thisImu.linear_acceleration.y << 
+              ", z: " << thisImu.linear_acceleration.z << endl;
+        cout << "IMU gyro: " << endl;
+        cout << "x: " << thisImu.angular_velocity.x << 
+              ", y: " << thisImu.angular_velocity.y << 
+              ", z: " << thisImu.angular_velocity.z << endl;
+        double imuRoll, imuPitch, imuYaw;
+        tf::Quaternion orientation;
+        tf::quaternionMsgToTF(thisImu.orientation, orientation);
+        tf::Matrix3x3(orientation).getRPY(imuRoll, imuPitch, imuYaw);
+        cout << "IMU roll pitch yaw: " << endl;
+        cout << "roll: " << imuRoll << ", pitch: " << imuPitch << ", yaw: " << imuYaw << endl << endl;
+    
     }
 
     void odometryHandler(const nav_msgs::Odometry::ConstPtr& odometryMsg)
@@ -236,6 +324,17 @@ public:
         cloudHeader = currentCloudMsg.header;
         timeScanCur = cloudHeader.stamp.toSec();
         timeScanEnd = timeScanCur + laserCloudIn->points.back().time;
+
+        // static int scanCount = 0;
+        // if (scanCount < 5)
+        // {
+        //     ROS_WARN("Scan %d | point.time front = %.6f, back = %.6f, scanPeriod = %.6f",
+        //             scanCount,
+        //             laserCloudIn->points.front().time,
+        //             laserCloudIn->points.back().time,
+        //             laserCloudIn->points.back().time);
+        //     scanCount++;
+        // }
 
         // check dense flag
         if (laserCloudIn->is_dense == false)
@@ -476,14 +575,14 @@ public:
 
         // If the sensor moves relatively slow, like walking speed, positional deskew seems to have little benefits. Thus code below is commented.
 
-        // if (cloudInfo.odomAvailable == false || odomDeskewFlag == false)
-        //     return;
+        if (cloudInfo.odomAvailable == false || odomDeskewFlag == false)
+            return;
 
-        // float ratio = relTime / (timeScanEnd - timeScanCur);
+        float ratio = relTime / (timeScanEnd - timeScanCur);
 
-        // *posXCur = ratio * odomIncreX;
-        // *posYCur = ratio * odomIncreY;
-        // *posZCur = ratio * odomIncreZ;
+        *posXCur = ratio * odomIncreX;
+        *posYCur = ratio * odomIncreY;
+        *posZCur = ratio * odomIncreZ;
     }
 
     PointType deskewPoint(PointType *point, double relTime)
@@ -502,12 +601,41 @@ public:
         if (firstPointFlag == true)
         {
             transStartInverse = (pcl::getTransformation(posXCur, posYCur, posZCur, rotXCur, rotYCur, rotZCur)).inverse();
+
+            // [ADD] record scan start rotation
+            dbgRotX0 = rotXCur;
+            dbgRotY0 = rotYCur;
+            dbgRotZ0 = rotZCur;
+            deskewStartRecorded = true;
+            
             firstPointFlag = false;
         }
 
         // transform points to start
         Eigen::Affine3f transFinal = pcl::getTransformation(posXCur, posYCur, posZCur, rotXCur, rotYCur, rotZCur);
         Eigen::Affine3f transBt = transStartInverse * transFinal;
+
+        // [ADD] deskew rotation debug (once per scan)
+        if (deskewStartRecorded)
+        {
+            double dRotX = rotXCur - dbgRotX0;
+            double dRotY = rotYCur - dbgRotY0;
+            double dRotZ = rotZCur - dbgRotZ0;
+
+            std::lock_guard<std::mutex> lock(rawImuMtx);
+
+            if (rawImuCsv.is_open()) {
+                rawImuCsv
+                    << "DESKEW,"
+                    << timeScanCur << ","
+                    << dbgRotX0 << "," << dbgRotY0 << "," << dbgRotZ0 << ","
+                    << rotXCur  << "," << rotYCur  << "," << rotZCur  << ","
+                    << dRotX << "," << dRotY << "," << dRotZ
+                    << "\n";
+            }
+
+            deskewStartRecorded = false;  // scan당 1번만
+        }
 
         PointType newPoint;
         newPoint.x = transBt(0,0) * point->x + transBt(0,1) * point->y + transBt(0,2) * point->z + transBt(0,3);

@@ -355,7 +355,25 @@ public:
             double imuTime = ROS_TIME(thisImu);
             if (imuTime < currentCorrectionTime - delta_t)
             {
-                double dt = (lastImuT_opt < 0) ? (1.0 / 500.0) : (imuTime - lastImuT_opt);
+                // double dt = (lastImuT_opt < 0) ? (1.0 / 500.0) : (imuTime - lastImuT_opt);
+                // 🔴 첫 IMU는 dt를 만들지 말고 버린다
+                if (lastImuT_opt < 0)
+                {
+                    lastImuT_opt = imuTime;
+                    imuQueOpt.pop_front();
+                    continue;   // ★ 중요
+                }
+
+                double dt = imuTime - lastImuT_opt;
+
+                // 🔴 방어 코드 (시간 역행 / 0 dt 차단)
+                if (dt <= 0)
+                {
+                    lastImuT_opt = imuTime;
+                    imuQueOpt.pop_front();
+                    continue;
+                }
+
                 imuIntegratorOpt_->integrateMeasurement(
                         gtsam::Vector3(thisImu->linear_acceleration.x, thisImu->linear_acceleration.y, thisImu->linear_acceleration.z),
                         gtsam::Vector3(thisImu->angular_velocity.x,    thisImu->angular_velocity.y,    thisImu->angular_velocity.z), dt);
@@ -468,7 +486,16 @@ public:
             return;
 
         double imuTime = ROS_TIME(&thisImu);
-        double dt = (lastImuT_imu < 0) ? (1.0 / 500.0) : (imuTime - lastImuT_imu);
+        // double dt = (lastImuT_imu < 0) ? (1.0 / 500.0) : (imuTime - lastImuT_imu);
+        // lastImuT_imu = imuTime;
+        
+        double dt;
+        if (lastImuT_imu < 0)
+        {
+            lastImuT_imu = imuTime;
+            return;   // 첫 샘플은 적분하지 않음
+        }
+        dt = imuTime - lastImuT_imu;
         lastImuT_imu = imuTime;
 
         // integrate this single imu message
