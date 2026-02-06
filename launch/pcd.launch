@@ -1,0 +1,15 @@
+<launch>
+  <node pkg="pcl_ros" type="pcd_to_pointcloud" name="pcd_global" output="screen">
+    <param name="file_name" value="/home/scout/Downloads/LOAM/GlobalMap.pcd"/>
+    <param name="frame_id" value="map"/>
+    <param name="latch" value="true"/>
+    <remap from="cloud_pcd" to="global_map_pcd"/>
+  </node>
+
+  <node pkg="pcl_ros" type="pcd_to_pointcloud" name="pcd_traj" output="screen">
+    <param name="file_name" value="/home/scout/Downloads/LOAM/trajectory.pcd"/>
+    <param name="frame_id" value="map"/>
+    <param name="latch" value="true"/>
+    <remap from="cloud_pcd" to="trajectory_pcd"/>
+  </node>
+</launch>

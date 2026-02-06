@@ -1,0 +1,115 @@
+lio_sam:
+
+  # =========================
+  # Topics (bag 기준)
+  # =========================
+  pointCloudTopic: "/points_raw"
+  imuTopic: "/imu_correct"
+  odomTopic: "odometry/imu"
+  gpsTopic: ""                     # 🔴 GPS 완전 차단
+
+  # =========================
+  # Frames (TF 일관성)
+  # =========================
+  lidarFrame: "velodyne"
+  baselinkFrame: "chassis_link"
+  odometryFrame: "odom"
+  mapFrame: "map"
+
+  # =========================
+  # GPS Settings (사용 안 함)
+  # =========================
+  useImuHeadingInitialization: false   # 🔴 IMU yaw 초기화 금지
+  useGpsElevation: false
+  gpsCovThreshold: 9999.0              # 안전장치 (사실상 무효)
+  poseCovThreshold: 9999.0
+
+  # =========================
+  # Export
+  # =========================
+  savePCD: false
+  savePCDDirectory: "/Downloads/LOAM/"
+
+  # =========================
+  # Sensor
+  # =========================
+  sensor: velodyne
+  N_SCAN: 16
+  Horizon_SCAN: 1800
+  downsampleRate: 1
+  lidarMinRange: 1.0
+  lidarMaxRange: 1000.0
+
+  # =========================
+  # IMU (핵심 수정)
+  # =========================
+  imuAccNoise: 3.9939570888238808e-03
+  imuGyrNoise: 1.5636343949698187e-03
+  imuAccBiasN: 6.4356659353532566e-05
+  imuGyrBiasN: 3.5640318696367613e-05
+  imuGravity: 9.80511
+  imuRPYWeight: 0.0              # 🔴 IMU yaw/roll/pitch 보정 완전 제거
+
+  # =========================
+  # Extrinsic (일단 유지)
+  # =========================
+  extrinsicTrans: [0.0, 0.0, 0.0]
+  extrinsicRot: [-1, 0, 0,
+                  0, 1, 0,
+                  0, 0, -1]
+  extrinsicRPY: [0, -1, 0,
+                 1, 0, 0,
+                 0, 0, 1]
+
+  # =========================
+  # Feature
+  # =========================
+  edgeThreshold: 1.0
+  surfThreshold: 0.1
+  edgeFeatureMinValidNum: 10
+  surfFeatureMinValidNum: 100
+
+  # =========================
+  # Downsampling
+  # =========================
+  odometrySurfLeafSize: 0.4
+  mappingCornerLeafSize: 0.2
+  mappingSurfLeafSize: 0.4
+
+  # =========================
+  # Motion constraint
+  # =========================
+  z_tollerance: 1000
+  rotation_tollerance: 1000
+
+  # =========================
+  # CPU
+  # =========================
+  numberOfCores: 4
+  mappingProcessInterval: 0.15
+
+  # =========================
+  # Surrounding map
+  # =========================
+  surroundingkeyframeAddingDistThreshold: 1.0
+  surroundingkeyframeAddingAngleThreshold: 0.2
+  surroundingKeyframeDensity: 2.0
+  surroundingKeyframeSearchRadius: 50.0
+
+  # =========================
+  # Loop closure (OFF)
+  # =========================
+  loopClosureEnableFlag: false
+  loopClosureFrequency: 1.0
+  surroundingKeyframeSize: 50
+  historyKeyframeSearchRadius: 15.0
+  historyKeyframeSearchTimeDiff: 30.0
+  historyKeyframeSearchNum: 25
+  historyKeyframeFitnessScore: 0.3
+
+  # =========================
+  # Visualization
+  # =========================
+  globalMapVisualizationSearchRadius: 1000.0
+  globalMapVisualizationPoseDensity: 10.0
+  globalMapVisualizationLeafSize: 1.0

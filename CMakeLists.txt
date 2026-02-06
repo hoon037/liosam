@@ -19,6 +19,8 @@ find_package(catkin REQUIRED COMPONENTS
   nav_msgs
   message_generation
   visualization_msgs
+  pcl_ros
+  tf2_ros
 )
 
 find_package(OpenMP REQUIRED)
@@ -106,3 +108,27 @@ target_link_libraries(${PROJECT_NAME}_imuPreintegration Boost::timer ${catkin_LI
 add_executable(imu_time_from_lidar_node src/imu_time_from_lidar_node.cpp)
 target_link_libraries(imu_time_from_lidar_node ${catkin_LIBRARIES})
 add_dependencies(imu_time_from_lidar_node ${catkin_EXPORTED_TARGETS})
+
+# --------------------------------------------------
+# Localization (map reuse, trajectory anchors)
+# --------------------------------------------------
+add_executable(lio_sam_localization
+  src/localization_node.cpp
+)
+
+target_link_libraries(lio_sam_localization
+  ${catkin_LIBRARIES}
+  ${PCL_LIBRARIES}
+)
+
+# --------------------------------------------------
+# Map ↔ Odom Aligner (offline / initialization)
+# --------------------------------------------------
+add_executable(map_map_aligner
+  src/map_map_aligner_node.cpp
+)
+
+target_link_libraries(map_map_aligner
+  ${catkin_LIBRARIES}
+  ${PCL_LIBRARIES}
+)

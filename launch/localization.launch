@@ -1,0 +1,20 @@
+<launch>
+
+  <!-- trajectory / global map은 이미 pcd.launch로 떠 있다고 가정 -->
+
+  <node pkg="lio_sam"
+        type="lio_sam_localization"
+        name="lio_sam_localization"
+        output="screen">
+
+    <!-- anchor downsampling -->
+    <!--  >0 : ON , <=0 : OFF -->
+    <param name="anchor_min_dist" value="2.0"/>
+
+    <!-- RViz 확인용 -->
+    <param name="publish_anchor_cloud" value="true"/>
+    <param name="publish_anchor_markers" value="true"/>
+
+  </node>
+
+</launch>

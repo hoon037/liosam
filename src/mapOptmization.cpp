@@ -62,6 +62,11 @@ public:
     std::ofstream mapOriCsv;
     bool mapOriHeaderWritten = false;
 
+    // [ADD] submap evaluation accumulators
+    double eval_sum_abs_pd = 0.0;
+    double eval_max_abs_pd = 0.0;
+    int    eval_cnt = 0;
+
     Values initialEstimate;
     Values optimizedEstimate;
     ISAM2 *isam;
@@ -354,7 +359,6 @@ public:
         return thisPose6D;
     }
 
-    
 
 
 
@@ -813,8 +817,8 @@ public:
             transformTobeMapped[2] = cloudInfo.imuYawInit;
 
             if (!useImuHeadingInitialization)
-                transformTobeMapped[0] = 0.00001;           //0121  
-                transformTobeMapped[1] = 0.00001;           //0121
+                transformTobeMapped[0] = 0;           //0121  
+                transformTobeMapped[1] = 0;           //0121
                 transformTobeMapped[2] = 0;
 
             lastImuTransformation = pcl::getTransformation(0, 0, 0, cloudInfo.imuRollInit, cloudInfo.imuPitchInit, cloudInfo.imuYawInit); // save imu before return;
@@ -1143,6 +1147,14 @@ public:
                     coeff.intensity = s * pd2;
 
                     if (s > 0.1) {
+
+                        // ===== [ADD] submap vs scan evaluation =====
+                        double abs_pd = std::abs(pd2);
+                        eval_sum_abs_pd += abs_pd;
+                        eval_max_abs_pd = std::max(eval_max_abs_pd, abs_pd);
+                        eval_cnt++;
+                        // ==========================================
+
                         laserCloudOriSurfVec[i] = pointOri;
                         coeffSelSurfVec[i] = coeff;
                         laserCloudOriSurfFlag[i] = true;
@@ -1333,6 +1345,11 @@ public:
         if (cloudKeyPoses3D->points.empty())
             return;
 
+        // [ADD] reset per-anchor evaluation
+        eval_sum_abs_pd = 0.0;
+        eval_max_abs_pd = 0.0;
+        eval_cnt = 0;
+
         if (laserCloudCornerLastDSNum > edgeFeatureMinValidNum && laserCloudSurfLastDSNum > surfFeatureMinValidNum)
         {
             kdtreeCornerFromMap->setInputCloud(laserCloudCornerFromMapDS);
@@ -1355,6 +1372,18 @@ public:
             transformUpdate();
         } else {
             ROS_WARN("Not enough features! Only %d edge and %d planar features available.", laserCloudCornerLastDSNum, laserCloudSurfLastDSNum);
+        }
+
+        if (eval_cnt > 0)
+        {
+            double mean_abs_pd = eval_sum_abs_pd / eval_cnt;
+
+            ROS_INFO_STREAM(
+                "[SUBMAP_EVAL] anchor=" << cloudKeyPoses3D->size()
+                << " cnt=" << eval_cnt
+                << " mean_abs_pd=" << mean_abs_pd
+                << " max_abs_pd=" << eval_max_abs_pd
+            );
         }
     }
 
